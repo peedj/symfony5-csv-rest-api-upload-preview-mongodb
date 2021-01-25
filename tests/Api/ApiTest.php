@@ -61,17 +61,16 @@ class ApiTest extends WebTestCase
         $this->assertEquals(200, $response->getStatusCode());
 
         $result = $response->getContent();
-        $this->assertStringStartsWith('{"fileName":"test.csv","items":[]', $result);
+        $this->assertStringStartsWith('{"fileName":"test.csv","items":[', $result, 'Not Corresponding Response Returned');
 
         $array = \json_decode($result, true);
 
-        var_dump($array);
+        $this->assertIsArray($array, 'Response is Array');
 
-        $this->assertIsArray($array);
+        $this->assertArrayHasKey('items', $array, "Has no Items In Response"); // has items
+        $this->assertArrayHasKey(1, $array['items'], "Has no Item With Index=1 In Response"); // second row
 
-        $this->assertArrayHasKey(1, $array); // second row
-
-        $this->assertEquals('Ujifu cieg jiwig icfin sovi ecudof rumaka neufekug fotzaudi azo ca cedhi picaw cudes cerismin wevvoswob.', $array[1][1], 'File uploaded And Parsed And It Took Less than ' . $xSeconds . ' sec');
+        $this->assertEquals('Ujifu cieg jiwig icfin sovi ecudof rumaka neufekug fotzaudi azo ca cedhi picaw cudes cerismin wevvoswob.', $array['items'][1][1], 'File uploaded And Parsed And It Took Less than ' . $xSeconds . ' sec');
     }
 
     private function _createUploadFile()
