@@ -1,0 +1,3 @@
+csv:
+  type:     rest
+  resource: App\Controller\Api\CsvController
