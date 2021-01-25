@@ -65,7 +65,7 @@ final class CsvController
         $this->documentManager->persist($csvFile);
         $this->documentManager->flush();
 
-        $process = new Process(['bin/console', 'app:parse-csv'], getcwd() . "/../");
+        $process = new Process(['bin/console', 'app:parse-csv'], __DIR__ . "/../../../");
         $process->setOptions(['create_new_console' => true]);
         $process->run();
 
