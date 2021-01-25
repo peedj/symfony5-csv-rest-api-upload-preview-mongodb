@@ -81,7 +81,10 @@
         }
     },
     "require-dev": {
+        "symfony/browser-kit": "5.2.*",
+        "symfony/css-selector": "5.2.*",
         "symfony/debug-bundle": "5.2.*",
+        "symfony/phpunit-bridge": "^5.2",
         "symfony/web-server-bundle": "^4.4.2"
     }
 }

@@ -59,7 +59,7 @@ class CsvFile
 
     public function getDateCreated()
     {
-        return $this->date_created;
+        return $this->date_created->getTimestamp();
     }
 
     public function setDateCreated($date_created): self
@@ -99,7 +99,7 @@ class CsvFile
             'id' => $this->getId(),
             'fileName' => $this->getFileName(),
             'dateCreated' => $this->getDateCreated(),
-            'getStatus' => $this->getStatus(),
+            'status' => $this->getStatus(),
         ];
     }
 }
