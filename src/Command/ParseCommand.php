@@ -4,7 +4,6 @@ namespace App\Command;
 
 use App\Entity\File;
 use App\Entity\FileData;
-use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\OptimisticLockException;
 use Doctrine\ORM\ORMException;
 use Doctrine\Persistence\Mapping\MappingException;
@@ -66,15 +65,15 @@ class ParseCommand extends Command
                 // update status to done
                 // you need to "re-find object"
                 $this->repository->findOneBy(['id' => $fileToProcess->getId()])->setStatus(File::STATUS_COMPLETE);
-                $this->unlinkFile($fileToProcess->getFilePath());
                 $this->dm->flush();
                 $this->dm->clear();
+                $this->unlinkFile($fileToProcess->getFilePath());
                 echo "parse done: #{$fileToProcess->getId()} {$fileToProcess->getFileName()} : {$fileToProcess->getStatus()};\n";
             } catch (\Exception $e) {
                 $this->repository->findOneBy(['id' => $fileToProcess->getId()])->setStatus(File::STATUS_FAIL);
                 $this->dm->flush();
                 $this->dm->clear();
-                echo "parse error: #{$fileToProcess->getId()} {$fileToProcess->getFileName()} : {$fileToProcess->getStatus()};\n";
+                echo "parse error: #{$fileToProcess->getId()} {$fileToProcess->getFileName()} : {$fileToProcess->getStatus()}; {$e->getMessage()}\n";
             }
         }
         return Command::SUCCESS;
@@ -134,25 +133,13 @@ class ParseCommand extends Command
     {
         $i = 0;
         $total = 0;
+        // switch off logger in order  not to have memory issues
         $this->dm->getConnection()
         ->getConfiguration()
         ->setSQLLogger(null);
         while ($row = fgetcsv($handle, 0, $delimiter)) {
             if ($total > 0) {
-                $date = \DateTime::createFromFormat('Y-m-d H:i', $row[0] . ' 00:00', new \DateTimeZone('Europe/Vilnius'));
-                $newFileData = new FileData();
-                $newFileData->setFile($this->dm->getReference(File::class, $file->getId()));
-                $newFileData->setDate($date);
-                $newFileData->setClient($row[1]);
-                $newFileData->setSignSmartid($row[2]);
-                $newFileData->setSignMobile($row[3]);
-                $newFileData->setSignSc($row[4]);
-                $newFileData->setAuthorizeSmartid($row[5]);
-                $newFileData->setAuthorizeMobile($row[6]);
-                $newFileData->setAuthorizeSc($row[7]);
-                $newFileData->setOcsp($row[8]);
-                $newFileData->setCrl($row[9]);
-
+                $newFileData = $this->createNewFileData($file->getId(), $row);
                 $this->dm->persist($newFileData);
                 $i++;
             }
@@ -172,5 +159,30 @@ class ParseCommand extends Command
     {
         echo 'delete '. $getFilePath . "\n";
         `rm -rf $getFilePath`;
+    }
+
+    /**
+     * @param int $fileId
+     * @param mixed $row
+     * @return FileData
+     * @throws ORMException
+     */
+    protected function createNewFileData(int $fileId, $row): FileData
+    {
+        $date = \DateTime::createFromFormat('Y-m-d H:i', $row[0] . ' 00:00', new \DateTimeZone('Europe/Vilnius'));
+
+        $newFileData = new FileData();
+        $newFileData->setFile($this->dm->getReference(File::class, $fileId));
+        $newFileData->setDate($date);
+        $newFileData->setClient($row[1]);
+        $newFileData->setSignSmartid($row[2]);
+        $newFileData->setSignMobile($row[3]);
+        $newFileData->setSignSc($row[4]);
+        $newFileData->setAuthorizeSmartid($row[5]);
+        $newFileData->setAuthorizeMobile($row[6]);
+        $newFileData->setAuthorizeSc($row[7]);
+        $newFileData->setOcsp($row[8]);
+        $newFileData->setCrl($row[9]);
+        return $newFileData;
     }
 }
