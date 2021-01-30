@@ -1,10 +1,6 @@
 framework:
   serializer:
     enabled: true
-doctrine_mongodb:
-  document_managers:
-    default:
-      auto_mapping: true
 nelmio_cors:
   defaults:
     origin_regex: true

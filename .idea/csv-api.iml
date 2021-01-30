@@ -100,6 +100,9 @@
       <excludeFolder url="file://$MODULE_DIR$/vendor/symfony/css-selector" />
       <excludeFolder url="file://$MODULE_DIR$/vendor/symfony/browser-kit" />
       <excludeFolder url="file://$MODULE_DIR$/vendor/symfony/phpunit-bridge" />
+      <excludeFolder url="file://$MODULE_DIR$/vendor/peedj/devexpresselma" />
+      <excludeFolder url="file://$MODULE_DIR$/vendor/lstrojny/functional-php" />
+      <excludeFolder url="file://$MODULE_DIR$/vendor/beberlei/doctrineextensions" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

@@ -1,4 +1,7 @@
 {
+    "beberlei/doctrineextensions": {
+        "version": "v1.3.0"
+    },
     "composer/package-versions-deprecated": {
         "version": "1.11.99.1"
     },
@@ -148,6 +151,9 @@
     "laminas/laminas-zendframework-bridge": {
         "version": "1.1.1"
     },
+    "lstrojny/functional-php": {
+        "version": "1.15.0"
+    },
     "mongodb/mongodb": {
         "version": "1.8.0"
     },
@@ -165,6 +171,9 @@
     },
     "nikic/php-parser": {
         "version": "v4.10.4"
+    },
+    "peedj/devexpresselma": {
+        "version": "1.1.x-dev"
     },
     "phpdocumentor/reflection-common": {
         "version": "2.2.0"
@@ -439,15 +448,6 @@
     },
     "symfony/var-exporter": {
         "version": "v5.2.1"
-    },
-    "symfony/web-server-bundle": {
-        "version": "3.3",
-        "recipe": {
-            "repo": "github.com/symfony/recipes",
-            "branch": "master",
-            "version": "3.3",
-            "ref": "dae9b39fd6717970be7601101ce5aa960bf53d9a"
-        }
     },
     "symfony/webpack-encore-pack": {
         "version": "1.0",

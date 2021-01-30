@@ -3,9 +3,14 @@ declare(strict_types=1);
 
 namespace App\Controller\Api;
 
-use App\Document\CsvFile;
-use App\Document\CsvFileData;
-use App\Repository\CsvFileRepository;
+use App\Entity\File;
+use App\Entity\FileData;
+use App\Repository\FileDataRepository;
+use App\Repository\FileRepository;
+use Bilendi\DevExpressBundle\DataGrid\Parser\SearchQueryParser;
+use Bilendi\DevExpressBundle\DataGrid\QueryHandler\DoctrineQueryConfig;
+use Bilendi\DevExpressBundle\DataGrid\QueryHandler\DoctrineQueryHandler;
+use Bilendi\DevExpressBundle\DataGrid\Search\SearchQuery;
 use Doctrine\Common\Persistence\ObjectRepository;
 use Doctrine\ODM\MongoDB\DocumentManager;
 use Doctrine\ORM\EntityManagerInterface;
@@ -17,34 +22,42 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\Process\Process;
+use Symfony\Component\Serializer\Exception\ExceptionInterface;
+use Symfony\Component\Serializer\Normalizer\AbstractNormalizer;
+use Symfony\Component\Serializer\Normalizer\DateTimeNormalizer;
 use Symfony\Component\Serializer\Normalizer\ObjectNormalizer;
 use Symfony\Component\Serializer\Serializer;
 
 final class CsvController
     extends AbstractFOSRestController
 {
-    /** @var DocumentManager */
-    private $documentManager;
+    /** @var FileRepository */
+    private FileRepository $fileRepository;
+    /** @var FileDataRepository */
+    private FileDataRepository $fileDataRepository;
 
-    /** @var CsvFileRepository */
-    private $objectRepository;
 
-    public function __construct(DocumentManager $dm)
+    /**
+     * CsvController constructor.
+     * @param FileRepository $fileRepository
+     * @param FileDataRepository $fileDataRepository
+     */
+    public function __construct(FileRepository $fileRepository, FileDataRepository $fileDataRepository)
     {
-        $this->documentManager = $dm;
+        $this->fileRepository = $fileRepository;
+        $this->fileDataRepository = $fileDataRepository;
     }
 
     /**
      * @Rest\Post("/csv")
      * @param Request $request
      * @return View
-     * @throws \Doctrine\ODM\MongoDB\MongoDBException
+     * @throws ExceptionInterface
      */
     public function postCsvFile(Request $request): View
     {
         /** @var $file UploadedFile */
         $file = $request->files->get('csv_file');
-
 
         if (!$file) {
             throw new \Exception('CSV File Missing');
@@ -54,64 +67,91 @@ final class CsvController
             throw new \Exception('Only CSV Files Allowed');
         }
 
-        $filePath = $this->documentManager->getRepository(CsvFile::class)->saveCsvFile($file);
+        $savePath = $this->fileRepository->saveCsvFile($this->getParameter('env(UPLOAD_FOLDER)'), $file);
 
-        $csvFile = new CsvFile();
-        $csvFile->setFileName($file->getClientOriginalName());
-        $csvFile->setFilePath($filePath);
-        $csvFile->setStatus(CsvFile::STATUS_NEW);
-        $csvFile->setDateCreated(new \MongoDB\BSON\Timestamp(1, date('U')));
+        $newFile = File::create($file->getClientOriginalName(), $savePath);
+        $entityManager = $this->getDoctrine()->getManager();
+        $entityManager->persist($newFile);
+        $entityManager->flush();
 
-        $this->documentManager->persist($csvFile);
-        $this->documentManager->flush();
+        /* @todo: Refactor to flock or RabbitMQ
+         * $process = new Process(['bin/console', 'app:parse-csv', '> /dev/null 2>&1 &'], __DIR__ . "/../../../");
+         * $process->setOptions(['create_new_console' => true]);
+         * $process->run();
+         */
 
-        $process = new Process(['bin/console', 'app:parse-csv'], __DIR__ . "/../../../");
-        $process->setOptions(['create_new_console' => true]);
-        $process->run();
+        $path = __DIR__ . "/../../../";
+        `cd $path && (bin/console app:parse-csv > /dev/null 2>&1 &)`;
 
         $serializer = new Serializer([new ObjectNormalizer()]);
-        return View::create($serializer->normalize($csvFile), Response::HTTP_CREATED);
+        return View::create($serializer->normalize($newFile), Response::HTTP_CREATED);
     }
 
     /**
-     * @Rest\Get("/csv-data/{csvFileId}/{page}/{perPage}")
-     * @param int $csvFileId
-     * @param int $page
-     * @param int $perPage
+     * @Rest\Get("/csv/{fileId}")
+     * @param int $fileId
+     * @param Request $request
      * @return View
-     * @throws \Doctrine\ODM\MongoDB\LockException
-     * @throws \Doctrine\ODM\MongoDB\Mapping\MappingException
+     * @throws ExceptionInterface
      */
-    public function getCsvFileData(string $csvFileId, int $page = 1, int $perPage = 10): View
+    public function getCsvFile(int $fileId, Request $request): View
     {
-        /**
-         * @var $csvFile CsvFile
-         */
-        $csvFile = $this->documentManager->getRepository(CsvFile::class)->findOneBy(['id' => $csvFileId]);
-
-        if (!$csvFile) {
-            throw new NotFoundHttpException();
+        $csvFile = $this->fileRepository->findOneBy(['id' => $fileId]);
+        if(!$csvFile) {
+            throw new NotFoundHttpException('File Not Found');
         }
 
-        $skip = $perPage * ($page - 1);
-        $csvFileData = $this->documentManager->createQueryBuilder(CsvFileData::class)
-            ->field('csvFileId')->equals($csvFileId)
-            ->limit($perPage)
-            ->skip($skip)
-            ->getQuery()
-            ->execute();
-
-        $atall = $this->documentManager->createQueryBuilder(CsvFileData::class)
-            ->field('csvFileId')->equals($csvFileId)->count()->getQuery()->execute();
-
         $serializer = new Serializer([new ObjectNormalizer()]);
+        return View::create($serializer->normalize($csvFile, 'json', [AbstractNormalizer::IGNORED_ATTRIBUTES => ['fileData']]), Response::HTTP_OK);
+    }
 
+    /**
+     * @Rest\Get("/csv-stats/{fileId}")
+     * @param int $fileId
+     * @param Request $request
+     * @param int|null $page
+     * @param int|null $perPage
+     * @return View
+     * @throws ExceptionInterface
+     * @throws \Bilendi\DevExpressBundle\Exception\NotNumericException
+     */
+    public function getCsvFileStats(int $fileId, Request $request): View
+    {
+        $csvFile = $this->fileRepository->findOneBy(['id' => $fileId]);
+        if(!$csvFile) {
+            throw new NotFoundHttpException('File Not Found');
+        }
+
+        // Initiate the parser
+        $parser = new SearchQueryParser();
+
+        $page = $request->get('page', 1);
+        $perPage = min(50, $request->get('perPage', 10));
+
+        $skip = ($page - 1) * $perPage;
+        $parser->getBuilder()->setStartIndex($skip);
+        $parser->getBuilder()->setMaxResults($perPage);
+
+        if($loadOptions = $request->get('loadOptions')) {
+            // Parse the DevExpress object
+            $query = $parser->parse(json_decode($loadOptions));
+        } else {
+            $query = $parser->getBuilder()->build();
+        }
+
+        // Link between the column header and the doctrine field
+        $map = [
+            'client' => 'fd.client',
+            'group_month' => 'DATE_FORMAT(fd.date, \'%Y-%m\')',
+        ];
+        // Create the config with the mapping
+        $config = new DoctrineQueryConfig($map);
+        $serializer = new Serializer([new DateTimeNormalizer(), new ObjectNormalizer()]);
+        // Return the data and the total number of item
         return View::create([
             'fileName' => $csvFile->getFileName(),
-            'items' => array_map(function ($cfd) {
-                return $cfd['data'];
-            }, $csvFileData ? $serializer->normalize($csvFileData) : []),
-            'atall' => $atall,
+            'items' => $serializer->normalize($this->getContent($fileId, $config, $query),  'json', [AbstractNormalizer::IGNORED_ATTRIBUTES => ['file']]),
+            'totalCount' => $this->getTotal($fileId, $config, $query),
         ], Response::HTTP_OK);
     }
 
@@ -120,52 +160,71 @@ final class CsvController
      * @param int $perPage
      * @param int $page
      * @return View
-     * @throws \Symfony\Component\Serializer\Exception\ExceptionInterface
+     * @throws ExceptionInterface
      */
     public function getCsvFiles(int $page = 1, int $perPage = 10): View
     {
-
         $skip = $perPage * ($page - 1);
-        $csvFiles = $this->documentManager->createQueryBuilder(CsvFile::class)
-            ->limit($perPage)
-            ->skip($skip)
-            ->sort('date_created', 'desc')
-            ->getQuery()
-            ->execute();
-
-        $atall = $this->documentManager->createQueryBuilder(CsvFile::class)->count()->getQuery()->execute();
+        $csvFiles = $this->fileRepository->getFileList($perPage, $skip);
 
         $serializer = new Serializer([new ObjectNormalizer()]);
 
         return View::create([
-            'items' => $serializer->normalize($csvFiles),
-            'atall' => $atall,
+            'items' => $serializer->normalize($csvFiles,  'json', [AbstractNormalizer::IGNORED_ATTRIBUTES => ['fileData']]),
+            'atall' => $this->fileRepository->getAtAll(),
         ], Response::HTTP_OK);
     }
 
+
     /**
-     * @Rest\Put("/csv/{id}")
+     * @Rest\Delete("/csv/{id}", name="delete", requirements={"id":"\d+"})
+     * @param Request $request
+     * @return View
      */
-    public function putCsvFile(int $id, Request $request): View
+    public function deleteCsvFile(Request $request): View
     {
-        $csv = $this->objectRepository->find($id);
+        $id = $request->get('id');
+        $entityManager = $this->getDoctrine()->getManager();
 
-        $csv->setFileName("?");
+        $entityManager->remove($this->fileRepository->findOneBy(['id' => $id]));
+        $entityManager->flush();
 
-        $this->entityManager->persist($csv);
-        $this->entityManager->flush();
-
-        return View::create($csv, Response::HTTP_OK);
+        return View::create(Response::HTTP_OK);
     }
 
     /**
-     * @Rest\Delete("/csv")
+     * @param int|null $fileId
+     * @param DoctrineQueryConfig $config
+     * @param SearchQuery $query
+     * @return int|mixed|string
      */
-    public function deleteCsvFile(int $id): View
+    private function getContent(?int $fileId = null, DoctrineQueryConfig $config, SearchQuery $query)
     {
-        $this->entityManager->remove($this->objectRepository->find($id));
-        $this->entityManager->flush();
+        // Create the query builder
+        $queryBuilder = $this->fileDataRepository->getBaseStatsQuery($fileId);
 
-        return View::create(Response::HTTP_OK);
+        // Create the query handle
+        $handler = new DoctrineQueryHandler($config, $queryBuilder, $query);
+        // Binds the filters, pagination and sorting
+        $queryBuilder = $handler->addAllModifiers();
+        return $queryBuilder->getQuery()->getResult();
+    }
+
+    /**
+     * @param int|null $fileId
+     * @param DoctrineQueryConfig $config
+     * @param SearchQuery $query
+     * @return mixed
+     */
+    private function getTotal(?int $fileId = null, DoctrineQueryConfig $config, SearchQuery $query)
+    {
+        $queryBuilder = $this->fileDataRepository->getBaseStatsQuery($fileId);
+
+        $handler = new DoctrineQueryHandler($config, $queryBuilder, $query);
+        // Add only the filters. You must not add the pagination. You should not add sorting (useless for counting)
+        $handler->addFilters();
+
+        $paginator = new \Doctrine\ORM\Tools\Pagination\Paginator($queryBuilder->getQuery());
+        return count($paginator);
     }
 }
