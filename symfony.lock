@@ -75,23 +75,6 @@
     "doctrine/migrations": {
         "version": "3.0.2"
     },
-    "doctrine/mongodb-odm": {
-        "version": "2.2.0"
-    },
-    "doctrine/mongodb-odm-bundle": {
-        "version": "3.3",
-        "recipe": {
-            "repo": "github.com/symfony/recipes-contrib",
-            "branch": "master",
-            "version": "3.3",
-            "ref": "1fd8598bf42227a1c8905edd32f640e4c5d15eff"
-        },
-        "files": [
-            "config/packages/doctrine_mongodb.yaml",
-            "config/packages/prod/doctrine_mongodb.yaml",
-            "src/Document/.gitignore"
-        ]
-    },
     "doctrine/orm": {
         "version": "2.8.1"
     },
@@ -118,9 +101,6 @@
     },
     "handcraftedinthealps/rest-routing-bundle": {
         "version": "1.0.2"
-    },
-    "jean85/pretty-package-versions": {
-        "version": "1.5.1"
     },
     "jms/metadata": {
         "version": "2.4.0"
@@ -153,9 +133,6 @@
     },
     "lstrojny/functional-php": {
         "version": "1.15.0"
-    },
-    "mongodb/mongodb": {
-        "version": "1.8.0"
     },
     "nelmio/cors-bundle": {
         "version": "1.5",
@@ -329,9 +306,6 @@
             "version": "1.0",
             "ref": "fadbfe33303a76e25cb63401050439aa9b1a9c7f"
         }
-    },
-    "symfony/options-resolver": {
-        "version": "v5.2.1"
     },
     "symfony/phpunit-bridge": {
         "version": "5.1",
